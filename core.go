@@ -58,77 +58,75 @@ func NewNetwork(sizes ...int) *Network {
 }
 
 type Example struct {
-	X     []float64
-	Input []float64
+	Input  []float64
+	Output []float64
 }
 
-func (net *Network) LearnIncrementally(eta float64, example Example) {
-	zs := make([]*mat.Dense, net.Depth)
+func (network *Network) LearnIncrementally(eta float64, example Example) {
+	zs := make([]*mat.Dense, network.Depth)
 	zs[0] = mat.NewDense(0, 0, nil) // fake weighted output for an input layer
 
-	as := make([]*mat.Dense, net.Depth)
+	as := make([]*mat.Dense, network.Depth)
 	as[0] = mat.NewDense(len(example.Input), 1, example.Input)
 
-	for layer := 1; layer < net.Depth; layer++ {
-		zs[layer] = mat.NewDense(net.Sizes[layer], 1, nil)
-		zs[layer].Mul(net.Weights[layer], as[layer-1])
-		zs[layer].Add(zs[layer], net.Biases[layer])
+	for layer := 1; layer < network.Depth; layer++ {
+		zs[layer] = mat.NewDense(network.Sizes[layer], 1, nil)
+		zs[layer].Mul(network.Weights[layer], as[layer-1])
+		zs[layer].Add(zs[layer], network.Biases[layer])
 
-		as[layer] = mat.NewDense(net.Sizes[layer], 1, nil)
+		as[layer] = mat.NewDense(network.Sizes[layer], 1, nil)
 		as[layer].Apply(func(_, _ int, x float64) float64 { return Sigmoid(x) }, zs[layer])
 	}
 
-	dws := make([]*mat.Dense, net.Depth)
-	dws[0] = mat.NewDense(0, 0, nil)
-
-	dbs := make([]*mat.Dense, net.Depth)
-	dbs[0] = mat.NewDense(0, 0, nil)
-
-	ds := make([]*mat.Dense, net.Depth)
+	ds := make([]*mat.Dense, network.Depth)
 	ds[0] = mat.NewDense(0, 0, nil)
 
-	L := net.Depth - 1
+	dws := make([]*mat.Dense, network.Depth)
+	dws[0] = mat.NewDense(0, 0, nil)
 
-	sp := mat.NewDense(net.Sizes[L], 1, nil)
+	dbs := make([]*mat.Dense, network.Depth)
+	dbs[0] = mat.NewDense(0, 0, nil)
+
+	L := network.Depth - 1
+
+	sp := mat.NewDense(network.Sizes[L], 1, nil)
 	sp.Apply(func(_, _ int, x float64) float64 { return SigmoidPrime(x) }, zs[L])
 
-	ds[L] = mat.NewDense(net.Sizes[L], 1, nil)
-	ds[L].Sub(as[L], mat.NewDense(len(example.X), 1, example.X))
+	ds[L] = mat.NewDense(network.Sizes[L], 1, nil)
+	ds[L].Sub(as[L], mat.NewDense(len(example.Output), 1, example.Output))
 	ds[L].MulElem(ds[L], sp)
 
-	wr, wc := net.Weights[L].Dims()
+	wr, wc := network.Weights[L].Dims()
 	dws[L] = mat.NewDense(wr, wc, nil)
 	dws[L].Mul(ds[L], as[L-1].T())
-	dws[L].Scale(eta, dws[L])
 
-	br, bc := net.Biases[L].Dims()
+	br, bc := network.Biases[L].Dims()
 	dbs[L] = mat.NewDense(br, bc, nil)
 	dbs[L].Copy(ds[L])
-	dbs[L].Scale(eta, dbs[L])
 
 	for layer := L - 1; layer > 0; layer-- {
-		sp := mat.NewDense(net.Sizes[layer], 1, nil)
+		sp := mat.NewDense(network.Sizes[layer], 1, nil)
 		sp.Apply(func(_, _ int, x float64) float64 { return SigmoidPrime(x) }, zs[layer])
 
-		ds[layer] = mat.NewDense(net.Sizes[layer], 1, nil)
-		ds[layer].Mul(net.Weights[layer+1].T(), ds[layer+1])
+		ds[layer] = mat.NewDense(network.Sizes[layer], 1, nil)
+		ds[layer].Mul(network.Weights[layer+1].T(), ds[layer+1])
 		ds[layer].MulElem(ds[layer], sp)
 
-		wr, wc := net.Weights[layer].Dims()
+		wr, wc := network.Weights[layer].Dims()
 		dws[layer] = mat.NewDense(wr, wc, nil)
 		dws[layer].Mul(ds[layer], as[layer-1].T())
 
-		br, bc := net.Biases[layer].Dims()
+		br, bc := network.Biases[layer].Dims()
 		dbs[layer] = mat.NewDense(br, bc, nil)
 		dbs[layer].Copy(ds[layer])
 	}
 
-	for layer := 1; layer < net.Depth; layer++ {
+	for layer := 1; layer < network.Depth; layer++ {
 		dws[layer].Scale(eta, dws[layer])
-		net.Weights[layer].Sub(net.Weights[layer], dws[layer])
+		network.Weights[layer].Sub(network.Weights[layer], dws[layer])
 
 		dbs[layer].Scale(eta, dbs[layer])
-		net.Biases[layer].Sub(net.Biases[layer], dbs[layer])
+		network.Biases[layer].Sub(network.Biases[layer], dbs[layer])
 	}
 }
 
@@ -156,95 +154,95 @@ func batch(size int, examples []Example) [][]Example {
 	return result
 }
 
-func (net *Network) learnStochasticallyWithSequentialBatchProcessing(eta float64, size int, examples []Example) {
+func (network *Network) learnStochasticallyWithSequentialBatchProcessing(eta float64, size int, examples []Example) {
 	shuffle(examples)
 
 	for _, batch := range batch(size, examples) {
-		nws := make([]*mat.Dense, net.Depth)
+		nws := make([]*mat.Dense, network.Depth)
 		nws[0] = mat.NewDense(0, 0, nil)
 
-		nbs := make([]*mat.Dense, net.Depth)
+		nbs := make([]*mat.Dense, network.Depth)
 		nbs[0] = mat.NewDense(0, 0, nil)
 
-		for layer := 1; layer < net.Depth; layer++ {
-			wr, wc := net.Weights[layer].Dims()
+		for layer := 1; layer < network.Depth; layer++ {
+			wr, wc := network.Weights[layer].Dims()
 			nws[layer] = mat.NewDense(wr, wc, nil)
 
-			br, bc := net.Biases[layer].Dims()
+			br, bc := network.Biases[layer].Dims()
 			nbs[layer] = mat.NewDense(br, bc, nil)
 		}
 
 		for _, example := range batch {
-			zs := make([]*mat.Dense, net.Depth)
+			zs := make([]*mat.Dense, network.Depth)
 			zs[0] = mat.NewDense(0, 0, nil) // fake weighted output for an input layer
 
-			as := make([]*mat.Dense, net.Depth)
+			as := make([]*mat.Dense, network.Depth)
 			as[0] = mat.NewDense(len(example.Input), 1, example.Input)
 
-			for layer := 1; layer < net.Depth; layer++ {
-				zs[layer] = mat.NewDense(net.Sizes[layer], 1, nil)
-				zs[layer].Mul(net.Weights[layer], as[layer-1])
-				zs[layer].Add(zs[layer], net.Biases[layer])
+			for layer := 1; layer < network.Depth; layer++ {
+				zs[layer] = mat.NewDense(network.Sizes[layer], 1, nil)
+				zs[layer].Mul(network.Weights[layer], as[layer-1])
+				zs[layer].Add(zs[layer], network.Biases[layer])
 
-				as[layer] = mat.NewDense(net.Sizes[layer], 1, nil)
+				as[layer] = mat.NewDense(network.Sizes[layer], 1, nil)
 				as[layer].Apply(func(_, _ int, x float64) float64 { return Sigmoid(x) }, zs[layer])
 			}
 
-			ds := make([]*mat.Dense, net.Depth)
+			ds := make([]*mat.Dense, network.Depth)
 			ds[0] = mat.NewDense(0, 0, nil)
 
-			dws := make([]*mat.Dense, net.Depth)
+			dws := make([]*mat.Dense, network.Depth)
 			dws[0] = mat.NewDense(0, 0, nil)
 
-			dbs := make([]*mat.Dense, net.Depth)
+			dbs := make([]*mat.Dense, network.Depth)
 			dbs[0] = mat.NewDense(0, 0, nil)
 
-			L := net.Depth - 1
+			L := network.Depth - 1
 
-			sp := mat.NewDense(net.Sizes[L], 1, nil)
+			sp := mat.NewDense(network.Sizes[L], 1, nil)
 			sp.Apply(func(_, _ int, x float64) float64 { return SigmoidPrime(x) }, zs[L])
 
-			ds[L] = mat.NewDense(net.Sizes[L], 1, nil)
-			ds[L].Sub(as[L], mat.NewDense(len(example.X), 1, example.X))
+			ds[L] = mat.NewDense(network.Sizes[L], 1, nil)
+			ds[L].Sub(as[L], mat.NewDense(len(example.Output), 1, example.Output))
 			ds[L].MulElem(ds[L], sp)
 
-			wr, wc := net.Weights[L].Dims()
+			wr, wc := network.Weights[L].Dims()
 			dws[L] = mat.NewDense(wr, wc, nil)
 			dws[L].Mul(ds[L], as[L-1].T())
 
-			br, bc := net.Biases[L].Dims()
+			br, bc := network.Biases[L].Dims()
 			dbs[L] = mat.NewDense(br, bc, nil)
 			dbs[L].Copy(ds[L])
 
 			for layer := L - 1; layer > 0; layer-- {
-				sp := mat.NewDense(net.Sizes[layer], 1, nil)
+				sp := mat.NewDense(network.Sizes[layer], 1, nil)
 				sp.Apply(func(_, _ int, x float64) float64 { return SigmoidPrime(x) }, zs[layer])
 
-				ds[layer] = mat.NewDense(net.Sizes[layer], 1, nil)
-				ds[layer].Mul(net.Weights[layer+1].T(), ds[layer+1])
+				ds[layer] = mat.NewDense(network.Sizes[layer], 1, nil)
+				ds[layer].Mul(network.Weights[layer+1].T(), ds[layer+1])
 				ds[layer].MulElem(ds[layer], sp)
 
-				wr, wc := net.Weights[layer].Dims()
+				wr, wc := network.Weights[layer].Dims()
 				dws[layer] = mat.NewDense(wr, wc, nil)
 				dws[layer].Mul(ds[layer], as[layer-1].T())
 
-				br, bc := net.Biases[layer].Dims()
+				br, bc := network.Biases[layer].Dims()
 				dbs[layer] = mat.NewDense(br, bc, nil)
 				dbs[layer].Copy(ds[layer])
 			}
 
-			for layer := 1; layer < net.Depth; layer++ {
+			for layer := 1; layer < network.Depth; layer++ {
 				nws[layer].Add(nws[layer], dws[layer])
 				nbs[layer].Add(nbs[layer], dbs[layer])
 			}
 		}
 
-		for layer := 1; layer < net.Depth; layer++ {
+		for layer := 1; layer < network.Depth; layer++ {
 			nws[layer].Scale(eta/float64(len(batch)), nws[layer])
-			net.Weights[layer].Sub(net.Weights[layer], nws[layer])
+			network.Weights[layer].Sub(network.Weights[layer], nws[layer])
 
 			nbs[layer].Scale(eta/float64(len(batch)), nbs[layer])
-			net.Biases[layer].Sub(net.Biases[layer], nbs[layer])
+			network.Biases[layer].Sub(network.Biases[layer], nbs[layer])
 		}
 	}
 }
@@ -268,116 +266,116 @@ func extendCols(times int, m *mat.Dense) *mat.Dense {
 	return result
 }
 
-func (net *Network) learnStochasticallyWithMatrixBatchProcessing(eta float64, size int, examples []Example) {
+type Gradient struct {
+	Weights []*mat.Dense
+	Biases  []*mat.Dense
+}
+
+func (network *Network) processBatch(eta float64, examples []Example) *Gradient {
+	m, lenInput, lenOutput := len(examples), len(examples[0].Input), len(examples[0].Output)
+
+	x := mat.NewDense(lenInput, m, nil)
+	y := mat.NewDense(lenOutput, m, nil)
+	for i, example := range examples {
+		x.SetCol(i, example.Input)
+		y.SetCol(i, example.Output)
+	}
+
+	zs := make([]*mat.Dense, network.Depth)
+	zs[0] = mat.NewDense(0, 0, nil) // fake weighted output for an input layer
+
+	as := make([]*mat.Dense, network.Depth)
+	as[0] = mat.DenseCopyOf(x)
+
+	for layer := 1; layer < network.Depth; layer++ {
+		zs[layer] = mat.NewDense(network.Sizes[layer], m, nil)
+		zs[layer].Mul(network.Weights[layer], as[layer-1])
+		zs[layer].Add(zs[layer], extendCols(m, network.Biases[layer]))
+
+		as[layer] = mat.NewDense(network.Sizes[layer], m, nil)
+		as[layer].Apply(func(_, _ int, x float64) float64 { return Sigmoid(x) }, zs[layer])
+	}
+
+	ds := make([]*mat.Dense, network.Depth)
+	ds[0] = mat.NewDense(0, 0, nil)
+
+	dws := make([]*mat.Dense, network.Depth)
+	dws[0] = mat.NewDense(0, 0, nil)
+
+	dbs := make([]*mat.Dense, network.Depth)
+	dbs[0] = mat.NewDense(0, 0, nil)
+
+	L := network.Depth - 1
+
+	sp := mat.NewDense(network.Sizes[L], m, nil)
+	sp.Apply(func(_, _ int, x float64) float64 { return SigmoidPrime(x) }, zs[L])
+
+	ds[L] = mat.NewDense(network.Sizes[L], m, nil)
+	ds[L].Sub(as[L], y)
+	ds[L].MulElem(ds[L], sp)
+
+	wr, wc := network.Weights[L].Dims()
+	dws[L] = mat.NewDense(wr, wc, nil)
+	for j := 0; j < m; j++ {
+		dw := mat.NewDense(wr, wc, nil)
+		dw.Mul(ds[L].ColView(j), as[L-1].ColView(j).T())
+		dws[L].Add(dws[L], dw)
+	}
+
+	br, bc := network.Biases[L].Dims()
+	dbs[L] = mat.NewDense(br, bc, nil)
+	for j := 0; j < m; j++ {
+		dbs[L].Add(dbs[L], ds[L].ColView(j))
+	}
+
+	for layer := L - 1; layer > 0; layer-- {
+		sp := mat.NewDense(network.Sizes[layer], m, nil)
+		sp.Apply(func(_, _ int, x float64) float64 { return SigmoidPrime(x) }, zs[layer])
+
+		ds[layer] = mat.NewDense(network.Sizes[layer], m, nil)
+		ds[layer].Mul(network.Weights[layer+1].T(), ds[layer+1])
+		ds[layer].MulElem(ds[layer], sp)
+
+		wr, wc := network.Weights[layer].Dims()
+		dws[layer] = mat.NewDense(wr, wc, nil)
+		for j := 0; j < m; j++ {
+			dw := mat.NewDense(wr, wc, nil)
+			dw.Mul(ds[layer].ColView(j), as[layer-1].ColView(j).T())
+			dws[layer].Add(dws[layer], dw)
+		}
+
+		br, bc := network.Biases[layer].Dims()
+		dbs[layer] = mat.NewDense(br, bc, nil)
+		for j := 0; j < m; j++ {
+			dbs[layer].Add(dbs[layer], ds[layer].ColView(j))
+		}
+	}
+
+	return &Gradient{
+		Weights: dws,
+		Biases:  dbs,
+	}
+}
+
+func (network *Network) learnStochasticallyWithMatrixBatchProcessing(eta float64, size int, examples []Example) {
 	shuffle(examples)
 
 	for _, batch := range batch(size, examples) {
-		nws := make([]*mat.Dense, net.Depth)
-		nws[0] = mat.NewDense(0, 0, nil)
+		g := network.processBatch(eta, batch)
 
-		nbs := make([]*mat.Dense, net.Depth)
-		nbs[0] = mat.NewDense(0, 0, nil)
+		for layer := 1; layer < network.Depth; layer++ {
+			g.Weights[layer].Scale(eta/float64(len(batch)), g.Weights[layer])
+			network.Weights[layer].Sub(network.Weights[layer], g.Weights[layer])
 
-		for layer := 1; layer < net.Depth; layer++ {
-			wr, wc := net.Weights[layer].Dims()
-			nws[layer] = mat.NewDense(wr, wc, nil)
-
-			br, bc := net.Biases[layer].Dims()
-			nbs[layer] = mat.NewDense(br, bc, nil)
-		}
-
-		m, inputLen, outputLen := len(batch), len(batch[0].Input), len(batch[0].X)
-
-		x := mat.NewDense(inputLen, m, nil)
-		y := mat.NewDense(outputLen, m, nil)
-		for i, example := range batch {
-			x.SetCol(i, example.Input)
-			y.SetCol(i, example.X)
-		}
-
-		zs := make([]*mat.Dense, net.Depth)
-		zs[0] = mat.NewDense(0, 0, nil) // fake weighted output for an input layer
-
-		as := make([]*mat.Dense, net.Depth)
-		as[0] = mat.DenseCopyOf(x)
-
-		for layer := 1; layer < net.Depth; layer++ {
-			zs[layer] = mat.NewDense(net.Sizes[layer], m, nil)
-			zs[layer].Mul(net.Weights[layer], as[layer-1])
-			zs[layer].Add(zs[layer], extendCols(m, net.Biases[layer]))
-
-			as[layer] = mat.NewDense(net.Sizes[layer], m, nil)
-			as[layer].Apply(func(_, _ int, x float64) float64 { return Sigmoid(x) }, zs[layer])
-		}
-
-		ds := make([]*mat.Dense, net.Depth)
-		ds[0] = mat.NewDense(0, 0, nil)
-
-		dws := make([]*mat.Dense, net.Depth)
-		dws[0] = mat.NewDense(0, 0, nil)
-
-		dbs := make([]*mat.Dense, net.Depth)
-		dbs[0] = mat.NewDense(0, 0, nil)
-
-		L := net.Depth - 1
-
-		sp := mat.NewDense(net.Sizes[L], m, nil)
-		sp.Apply(func(_, _ int, x float64) float64 { return SigmoidPrime(x) }, zs[L])
-
-		ds[L] = mat.NewDense(net.Sizes[L], m, nil)
-		ds[L].Sub(as[L], y)
-		ds[L].MulElem(ds[L], sp)
-
-		wr, wc := net.Weights[L].Dims()
-		dws[L] = mat.NewDense(wr, wc, nil)
-		for j := 0; j < m; j++ {
-			dw := mat.NewDense(wr, wc, nil)
-			dw.Mul(ds[L].ColView(j), as[L-1].ColView(j).T())
-			dws[L].Add(dws[L], dw)
-		}
-
-		br, bc := net.Biases[L].Dims()
-		dbs[L] = mat.NewDense(br, bc, nil)
-		for j := 0; j < m; j++ {
-			dbs[L].Add(dbs[L], ds[L].ColView(j))
-		}
-
-		for layer := L - 1; layer > 0; layer-- {
-			sp := mat.NewDense(net.Sizes[layer], m, nil)
-			sp.Apply(func(_, _ int, x float64) float64 { return SigmoidPrime(x) }, zs[layer])
-
-			ds[layer] = mat.NewDense(net.Sizes[layer], m, nil)
-			ds[layer].Mul(net.Weights[layer+1].T(), ds[layer+1])
-			ds[layer].MulElem(ds[layer], sp)
-
-			wr, wc := net.Weights[layer].Dims()
-			dws[layer] = mat.NewDense(wr, wc, nil)
-			for j := 0; j < m; j++ {
-				dw := mat.NewDense(wr, wc, nil)
-				dw.Mul(ds[layer].ColView(j), as[layer-1].ColView(j).T())
-				dws[layer].Add(dws[layer], dw)
-			}
-
-			br, bc := net.Biases[layer].Dims()
-			dbs[layer] = mat.NewDense(br, bc, nil)
-			for j := 0; j < m; j++ {
-				dbs[layer].Add(dbs[layer], ds[layer].ColView(j))
-			}
-		}
-
-		for layer := 1; layer < net.Depth; layer++ {
-			dws[layer].Scale(eta/float64(m), dws[layer])
-			net.Weights[layer].Sub(net.Weights[layer], dws[layer])
-
-			dbs[layer].Scale(eta/float64(m), dbs[layer])
-			net.Biases[layer].Sub(net.Biases[layer], dbs[layer])
+			g.Biases[layer].Scale(eta/float64(len(batch)), g.Biases[layer])
+			network.Biases[layer].Sub(network.Biases[layer], g.Biases[layer])
 		}
 	}
 }
 
-func (net *Network) LearnStochastically(eta float64, size int, examples []Example) {
-	//net.learnStochasticallyWithSequentialBatchProcessing(eta, size, examples)
-	net.learnStochasticallyWithMatrixBatchProcessing(eta, size, examples)
+func (network *Network) LearnStochastically(eta float64, size int, examples []Example) {
+	//network.learnStochasticallyWithSequentialBatchProcessing(eta, size, examples)
+	network.learnStochasticallyWithMatrixBatchProcessing(eta, size, examples)
 }
 
 func feedforward(w, a, b *mat.Dense, f func(float64) float64) *mat.Dense {
@@ -391,10 +389,10 @@ func feedforward(w, a, b *mat.Dense, f func(float64) float64) *mat.Dense {
 	return result
 }
 
-func (net *Network) Feedforward(input []float64) []float64 {
+func (network *Network) Feedforward(input []float64) []float64 {
 	x := mat.NewDense(len(input), 1, input)
-	for layer := 1; layer < net.Depth; layer++ {
-		w, b := net.Weights[layer], net.Biases[layer]
+	for layer := 1; layer < network.Depth; layer++ {
+		w, b := network.Weights[layer], network.Biases[layer]
 
 		x = feedforward(w, x, b, Sigmoid)
 	}

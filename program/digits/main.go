@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"time"
 
 	"github.com/shtmpl/learning"
-	"time"
 )
 
 const (
@@ -108,11 +108,6 @@ func readImages(name string) ([][][]byte, error) {
 }
 
 func wrapExample(label byte, image [][]byte) core.Example {
-	x := make([]float64, 10)
-	if label < 10 {
-		x[uint(label)] = 1.0
-	}
-
 	r, c := len(image), len(image[0])
 	input := make([]float64, r*c)
 	for i, row := range image {
@@ -121,7 +116,12 @@ func wrapExample(label byte, image [][]byte) core.Example {
 		}
 	}
 
-	return core.Example{X: x, Input: input}
+	x := make([]float64, 10)
+	if label < 10 {
+		x[uint(label)] = 1.0
+	}
+
+	return core.Example{Input: input, Output: x}
 }
 
 func readTrainingExamples() ([]core.Example, error) {
@@ -175,17 +175,31 @@ func maxFloat64(xs ...float64) (int, float64) {
 	return index, max
 }
 
-func evaluate(net *core.Network, examples []core.Example) (int, int) {
+func evaluate(network *core.Network, examples []core.Example) (int, int) {
 	result := 0
 	for _, example := range examples {
 		//fmt.Printf("%.9f\n", net.Feedforward(example.Input))
 		//fmt.Printf("%.9f\n", example.X)
 		//fmt.Println()
 
-		actual, _ := maxFloat64(net.Feedforward(example.Input)...)
-		expected, _ := maxFloat64(example.X...)
+		actual, _ := maxFloat64(network.Feedforward(example.Input)...)
+		expected, _ := maxFloat64(example.Output...)
 
 		if actual != -1 && expected != -1 && actual == expected {
+			result++
+		}
+	}
+
+	return result, len(examples)
+}
+
+func evaluateStrictly(tolerance float64, network *core.Network, examples []core.Example) (int, int) {
+	result := 0
+	for _, example := range examples {
+		actual, v := maxFloat64(network.Feedforward(example.Input)...)
+		expected, x := maxFloat64(example.Output...)
+
+		if actual != -1 && expected != -1 && actual == expected && math.Abs(v-x) < tolerance {
 			result++
 		}
 	}
@@ -206,15 +220,16 @@ func main() {
 
 	training, validation := data[:50000], data[50000:]
 
-	net := core.NewNetwork(784, 30, 10)
+	network := core.NewNetwork(784, 30, 10)
 
-	for epoch := 0; epoch < 30; epoch++ {
+	for epoch := 0; epoch < 10; epoch++ {
 		start := time.Now()
-		net.LearnStochastically(3.0, 10, training)
+		network.LearnStochastically(3.0, 10, training)
 
 		elapsed := time.Since(start)
 
-		success, total := evaluate(net, validation)
+		success, total := evaluate(network, validation)
+		//success, total := evaluateStrictly(0.01, network, validation)
 		log.Printf("Epoch %d: %d / %d. Elapsed time: %v\n", epoch, success, total, elapsed)
 	}
 
@@ -224,7 +239,7 @@ func main() {
 func show(example core.Example) {
 	var buffer bytes.Buffer
 
-	buffer.WriteString(fmt.Sprintf("%v:\n", example.X))
+	buffer.WriteString(fmt.Sprintf("%v:\n", example.Output))
 	for i := 0; i < len(example.Input); i++ {
 		if i%28 == 0 {
 			buffer.WriteRune('\n')
