@@ -206,11 +206,14 @@ func (network *Network) processBatch(eta float64, examples []Example) *Gradient 
 	ds := make([]*mat.Dense, network.Depth)
 	ds[0] = mat.NewDense(0, 0, nil)
 
-	dws := make([]*mat.Dense, network.Depth)
-	dws[0] = mat.NewDense(0, 0, nil)
+	result := &Gradient{
+		Weights: make([]*mat.Dense, network.Depth),
+		Biases:  make([]*mat.Dense, network.Depth),
+	}
 
-	dbs := make([]*mat.Dense, network.Depth)
-	dbs[0] = mat.NewDense(0, 0, nil)
+	result.Weights[0] = mat.NewDense(0, 0, nil)
+
+	result.Biases[0] = mat.NewDense(0, 0, nil)
 
 	L := network.Depth - 1
 
@@ -222,17 +225,17 @@ func (network *Network) processBatch(eta float64, examples []Example) *Gradient 
 	ds[L].MulElem(ds[L], sp)
 
 	wr, wc := network.Weights[L].Dims()
-	dws[L] = mat.NewDense(wr, wc, nil)
+	result.Weights[L] = mat.NewDense(wr, wc, nil)
 	for j := 0; j < m; j++ {
 		dw := mat.NewDense(wr, wc, nil)
 		dw.Mul(ds[L].ColView(j), as[L-1].ColView(j).T())
-		dws[L].Add(dws[L], dw)
+		result.Weights[L].Add(result.Weights[L], dw)
 	}
 
 	br, bc := network.Biases[L].Dims()
-	dbs[L] = mat.NewDense(br, bc, nil)
+	result.Biases[L] = mat.NewDense(br, bc, nil)
 	for j := 0; j < m; j++ {
-		dbs[L].Add(dbs[L], ds[L].ColView(j))
+		result.Biases[L].Add(result.Biases[L], ds[L].ColView(j))
 	}
 
 	for layer := L - 1; layer > 0; layer-- {
@@ -244,24 +247,21 @@ func (network *Network) processBatch(eta float64, examples []Example) *Gradient 
 		ds[layer].MulElem(ds[layer], sp)
 
 		wr, wc := network.Weights[layer].Dims()
-		dws[layer] = mat.NewDense(wr, wc, nil)
+		result.Weights[layer] = mat.NewDense(wr, wc, nil)
 		for j := 0; j < m; j++ {
 			dw := mat.NewDense(wr, wc, nil)
 			dw.Mul(ds[layer].ColView(j), as[layer-1].ColView(j).T())
-			dws[layer].Add(dws[layer], dw)
+			result.Weights[layer].Add(result.Weights[layer], dw)
 		}
 
 		br, bc := network.Biases[layer].Dims()
-		dbs[layer] = mat.NewDense(br, bc, nil)
+		result.Biases[layer] = mat.NewDense(br, bc, nil)
 		for j := 0; j < m; j++ {
-			dbs[layer].Add(dbs[layer], ds[layer].ColView(j))
+			result.Biases[layer].Add(result.Biases[layer], ds[layer].ColView(j))
 		}
 	}
 
-	return &Gradient{
-		Weights: dws,
-		Biases:  dbs,
-	}
+	return result
 }
 
 func (network *Network) LearnStochastically(eta float64, size int, examples []Example) {
