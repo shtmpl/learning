@@ -224,7 +224,7 @@ func main() {
 
 	for epoch := 0; epoch < 30; epoch++ {
 		start := time.Now()
-		network.LearnStochastically(3.0, 10, training)
+		network.LearnStochastically(core.CrossEntropyCost, 0.5, 10, training)
 
 		elapsed := time.Since(start)
 

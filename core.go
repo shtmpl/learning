@@ -67,6 +67,36 @@ type Gradient struct {
 	Biases  []*mat.Dense
 }
 
+type Cost struct {
+	Derivative func(z, a, y *mat.Dense) *mat.Dense
+}
+
+var QuadraticCost = Cost{
+	Derivative: func(z, a, y *mat.Dense) *mat.Dense {
+		r, c := y.Dims()
+
+		dz := mat.NewDense(r, c, nil)
+		dz.Apply(func(_, _ int, x float64) float64 { return SigmoidDerivative(x) }, z)
+
+		result := mat.NewDense(r, c, nil)
+		result.Sub(a, y)
+		result.MulElem(result, dz)
+
+		return result
+	},
+}
+
+var CrossEntropyCost = Cost{
+	Derivative: func(_, a, y *mat.Dense) *mat.Dense {
+		r, c := y.Dims()
+
+		result := mat.NewDense(r, c, nil)
+		result.Sub(a, y)
+
+		return result
+	},
+}
+
 func (network *Network) LearnIncrementally(eta float64, example Example) {
 	zs := make([]*mat.Dense, network.Depth)
 	zs[0] = mat.NewDense(0, 0, nil) // fake weighted output for an input layer
@@ -178,7 +208,7 @@ func extendCols(times int, m *mat.Dense) *mat.Dense {
 	return result
 }
 
-func (network *Network) processBatch(eta float64, examples []Example) *Gradient {
+func (network *Network) processBatch(cost Cost, eta float64, examples []Example) *Gradient {
 	m, lenInput, lenOutput := len(examples), len(examples[0].Input), len(examples[0].Output)
 
 	x := mat.NewDense(lenInput, m, nil)
@@ -217,12 +247,7 @@ func (network *Network) processBatch(eta float64, examples []Example) *Gradient 
 
 	L := network.Depth - 1
 
-	sp := mat.NewDense(network.Sizes[L], m, nil)
-	sp.Apply(func(_, _ int, x float64) float64 { return SigmoidDerivative(x) }, zs[L])
-
-	ds[L] = mat.NewDense(network.Sizes[L], m, nil)
-	ds[L].Sub(as[L], y)
-	ds[L].MulElem(ds[L], sp)
+	ds[L] = cost.Derivative(zs[L], as[L], y)
 
 	wr, wc := network.Weights[L].Dims()
 	result.Weights[L] = mat.NewDense(wr, wc, nil)
@@ -239,12 +264,12 @@ func (network *Network) processBatch(eta float64, examples []Example) *Gradient 
 	}
 
 	for layer := L - 1; layer > 0; layer-- {
-		sp := mat.NewDense(network.Sizes[layer], m, nil)
-		sp.Apply(func(_, _ int, x float64) float64 { return SigmoidDerivative(x) }, zs[layer])
+		dz := mat.NewDense(network.Sizes[layer], m, nil)
+		dz.Apply(func(_, _ int, x float64) float64 { return SigmoidDerivative(x) }, zs[layer])
 
 		ds[layer] = mat.NewDense(network.Sizes[layer], m, nil)
 		ds[layer].Mul(network.Weights[layer+1].T(), ds[layer+1])
-		ds[layer].MulElem(ds[layer], sp)
+		ds[layer].MulElem(ds[layer], dz)
 
 		wr, wc := network.Weights[layer].Dims()
 		result.Weights[layer] = mat.NewDense(wr, wc, nil)
@@ -264,11 +289,11 @@ func (network *Network) processBatch(eta float64, examples []Example) *Gradient 
 	return result
 }
 
-func (network *Network) LearnStochastically(eta float64, size int, examples []Example) {
+func (network *Network) LearnStochastically(cost Cost, eta float64, size int, examples []Example) {
 	shuffle(examples)
 
 	for _, batch := range batch(size, examples) {
-		g := network.processBatch(eta, batch)
+		g := network.processBatch(cost, eta, batch)
 
 		for layer := 0; layer < network.Depth; layer++ {
 			g.Weights[layer].Scale(eta/float64(len(batch)), g.Weights[layer])
