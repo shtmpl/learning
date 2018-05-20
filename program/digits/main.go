@@ -222,7 +222,7 @@ func main() {
 
 	network := core.NewNetwork(784, 30, 10)
 
-	for epoch := 0; epoch < 10; epoch++ {
+	for epoch := 0; epoch < 30; epoch++ {
 		start := time.Now()
 		network.LearnStochastically(3.0, 10, training)
 
