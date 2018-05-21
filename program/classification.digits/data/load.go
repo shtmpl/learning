@@ -1,24 +1,19 @@
-package main
+package data
 
 import (
-	"compress/gzip"
-	"bytes"
 	"encoding/binary"
+	"compress/gzip"
 	"os"
-	"fmt"
-	"log"
-	"math"
-	"time"
 
 	"github.com/shtmpl/learning"
 )
 
 const (
-	MNIST_TRAINING_SET_LABELS = `program/digits/resources/train-labels-idx1-ubyte.gz`
-	MNIST_TRAINING_SET_IMAGES = `program/digits/resources/train-images-idx3-ubyte.gz`
+	MNIST_TRAINING_SET_LABELS = `program/classification.digits/data/train-labels-idx1-ubyte.gz`
+	MNIST_TRAINING_SET_IMAGES = `program/classification.digits/data/train-images-idx3-ubyte.gz`
 
-	MNIST_TEST_SET_LABELS = `program/digits/resources/t10k-labels-idx1-ubyte.gz`
-	MNIST_TEST_SET_IMAGES = `program/digits/resources/t10k-images-idx3-ubyte.gz`
+	MNIST_TEST_SET_LABELS = `program/classification.digits/data/t10k-labels-idx1-ubyte.gz`
+	MNIST_TEST_SET_IMAGES = `program/classification.digits/data/t10k-images-idx3-ubyte.gz`
 )
 
 func readLabels(name string) ([]byte, error) {
@@ -124,7 +119,15 @@ func wrapExample(label byte, image [][]byte) core.Example {
 	return core.Example{Input: input, Output: x}
 }
 
-func readTrainingExamples() ([]core.Example, error) {
+func min(x, y int) int {
+	if x < y {
+		return x
+	}
+
+	return y
+}
+
+func LoadTrainingExamples() ([]core.Example, error) {
 	labels, err := readLabels(MNIST_TRAINING_SET_LABELS)
 	if err != nil {
 		return nil, err
@@ -135,7 +138,7 @@ func readTrainingExamples() ([]core.Example, error) {
 		return nil, err
 	}
 
-	enough := math.Min(float64(len(labels)), float64(len(images)))
+	enough := min(len(labels), len(images))
 	result := make([]core.Example, int(enough))
 	for i := range result {
 		result[i] = wrapExample(labels[i], images[i])
@@ -144,7 +147,7 @@ func readTrainingExamples() ([]core.Example, error) {
 	return result, nil
 }
 
-func readTestExamples() ([]core.Example, error) {
+func LoadTestExamples() ([]core.Example, error) {
 	labels, err := readLabels(MNIST_TEST_SET_LABELS)
 	if err != nil {
 		return nil, err
@@ -155,102 +158,11 @@ func readTestExamples() ([]core.Example, error) {
 		return nil, err
 	}
 
-	enough := math.Min(float64(len(labels)), float64(len(images)))
+	enough := min(len(labels), len(images))
 	result := make([]core.Example, int(enough))
 	for i := range result {
 		result[i] = wrapExample(labels[i], images[i])
 	}
 
 	return result, nil
-}
-
-func maxFloat64(xs ...float64) (int, float64) {
-	index, max := -1, math.Inf(-1)
-	for i := 0; i < len(xs); i++ {
-		if max < xs[i] {
-			index, max = i, xs[i]
-		}
-	}
-
-	return index, max
-}
-
-func evaluate(network *core.Network, examples []core.Example) (int, int) {
-	result := 0
-	for _, example := range examples {
-		//fmt.Printf("%.9f\n", net.Feedforward(example.Input))
-		//fmt.Printf("%.9f\n", example.X)
-		//fmt.Println()
-
-		actual, _ := maxFloat64(network.Feedforward(example.Input)...)
-		expected, _ := maxFloat64(example.Output...)
-
-		if actual != -1 && expected != -1 && actual == expected {
-			result++
-		}
-	}
-
-	return result, len(examples)
-}
-
-func evaluateStrictly(tolerance float64, network *core.Network, examples []core.Example) (int, int) {
-	result := 0
-	for _, example := range examples {
-		actual, v := maxFloat64(network.Feedforward(example.Input)...)
-		expected, x := maxFloat64(example.Output...)
-
-		if actual != -1 && expected != -1 && actual == expected && math.Abs(v-x) < tolerance {
-			result++
-		}
-	}
-
-	return result, len(examples)
-}
-
-func main() {
-	data, err := readTrainingExamples()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	//test, err := readTestExamples()
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-
-	training, validation := data[:50000], data[50000:]
-
-	network := core.NewNetwork(784, 30, 10)
-
-	for epoch := 0; epoch < 30; epoch++ {
-		start := time.Now()
-		network.LearnStochastically(core.CrossEntropyCost, 0.5, 10, training)
-
-		elapsed := time.Since(start)
-
-		success, total := evaluate(network, validation)
-		//success, total := evaluateStrictly(0.01, network, validation)
-		log.Printf("Epoch %d: %d / %d. Elapsed time: %v\n", epoch, success, total, elapsed)
-	}
-
-	log.Println(`Done`)
-}
-
-func show(example core.Example) {
-	var buffer bytes.Buffer
-
-	buffer.WriteString(fmt.Sprintf("%v:\n", example.Output))
-	for i := 0; i < len(example.Input); i++ {
-		if i%28 == 0 {
-			buffer.WriteRune('\n')
-		}
-
-		if example.Input[i] == 0.0 {
-			buffer.WriteRune(' ')
-		} else {
-			buffer.WriteRune('.')
-		}
-	}
-
-	fmt.Println(buffer.String())
 }
