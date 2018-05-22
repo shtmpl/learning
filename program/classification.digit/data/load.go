@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	MNIST_TRAINING_SET_LABELS = `program/classification.digits/data/train-labels-idx1-ubyte.gz`
-	MNIST_TRAINING_SET_IMAGES = `program/classification.digits/data/train-images-idx3-ubyte.gz`
+	MNIST_TRAINING_SET_LABELS = `program/classification.digit/data/train-labels-idx1-ubyte.gz`
+	MNIST_TRAINING_SET_IMAGES = `program/classification.digit/data/train-images-idx3-ubyte.gz`
 
-	MNIST_TEST_SET_LABELS = `program/classification.digits/data/t10k-labels-idx1-ubyte.gz`
-	MNIST_TEST_SET_IMAGES = `program/classification.digits/data/t10k-images-idx3-ubyte.gz`
+	MNIST_TEST_SET_LABELS = `program/classification.digit/data/t10k-labels-idx1-ubyte.gz`
+	MNIST_TEST_SET_IMAGES = `program/classification.digit/data/t10k-images-idx3-ubyte.gz`
 )
 
 func readLabels(name string) ([]byte, error) {
@@ -127,7 +127,7 @@ func min(x, y int) int {
 	return y
 }
 
-func LoadTrainingExamples() ([]core.Example, error) {
+func loadTraining() ([]core.Example, error) {
 	labels, err := readLabels(MNIST_TRAINING_SET_LABELS)
 	if err != nil {
 		return nil, err
@@ -147,7 +147,7 @@ func LoadTrainingExamples() ([]core.Example, error) {
 	return result, nil
 }
 
-func LoadTestExamples() ([]core.Example, error) {
+func loadTest() ([]core.Example, error) {
 	labels, err := readLabels(MNIST_TEST_SET_LABELS)
 	if err != nil {
 		return nil, err
@@ -165,4 +165,18 @@ func LoadTestExamples() ([]core.Example, error) {
 	}
 
 	return result, nil
+}
+
+func Load() ([]core.Example, []core.Example, []core.Example, error) {
+	training, err := loadTraining()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	test, err := loadTest()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return training[:50000], training[50000:], test, nil
 }
